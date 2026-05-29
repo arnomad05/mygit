@@ -8,8 +8,7 @@
 int cmd_log(int argc, char* argv[]) {
     Repository* repo = repo_open(".");
     if (!repo) {
-        fprintf(stderr, "%sError:%s Not a MyGit repository.\n",
-            COLOR_RED, COLOR_RESET);
+        fprintf(stderr, "Error: Not a MyGit repository.\n");
         return 1;
     }
 
@@ -27,21 +26,21 @@ int cmd_log(int argc, char* argv[]) {
     }
 
     CommitNode* commit = repo->head_commit;
-
     if (start_ref) {
         commit = repo_resolve_commit(repo, start_ref);
         if (!commit) {
-            fprintf(stderr, "%sError:%s Unknown commit: %s\n",
-                COLOR_RED, COLOR_RESET, start_ref);
+            fprintf(stderr, "Error: Unknown commit: %s\n", start_ref);
             repo_close(repo);
             return 1;
         }
     }
 
     int count = 0;
+
+    
     while (commit && (max_commits == -1 || count < max_commits)) {
         char* hash_str = sha1_to_string(&commit->hash);
-        printf("%scommit %s%s\n", COLOR_YELLOW, hash_str, COLOR_RESET);
+        printf("commit %s\n", hash_str);
         free(hash_str);
 
         printf("Date:   %s", ctime(&commit->timestamp));
