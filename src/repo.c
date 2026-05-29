@@ -316,6 +316,12 @@ CommitNode* repo_resolve_commit(Repository* repo, const char* ref) {
 bool repo_save(Repository* repo) {
     if (!repo) return false;
 
+    CommitNode* current = repo->head_commit;
+    while (current) {
+        commit_save_to_file(current, repo->git_dir);
+        current = current->prev;
+    }
+
     char* head_path = path_join(repo->git_dir, "HEAD");
     if (!head_path) return false;
 
@@ -420,6 +426,22 @@ Repository* repo_load(const char* path) {
         if (branch) {
             repo->head_commit = commit_load_from_hash(repo->git_dir,
                 &branch->commit_hash);
+
+            if (repo->head_commit) {
+                CommitNode* current = repo->head_commit;
+                while (current->has_parent) {
+                    CommitNode* parent = commit_load_from_hash(
+                        repo->git_dir, &current->parent_hash);
+                    if (parent) {
+                        current->prev = parent;
+                        parent->next = current;
+                        current = parent;
+                    }
+                    else {
+                        break;
+                    }
+                }
+            }
         }
     }
 
