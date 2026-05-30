@@ -310,16 +310,71 @@ int cmd_branch(int argc, char* argv[]) {
 
 int cmd_checkout(int argc, char* argv[]) {
     if (argc < 1) {
-        fprintf(stderr, "%sError:%s Specify branch or commit.\n",
-            COLOR_RED, COLOR_RESET);
+        fprintf(stderr, "Error: Specify branch, commit, or file.\n");
+        fprintf(stderr, "Usage: mygit checkout <branch>\n");
+        fprintf(stderr, "       mygit checkout <commit> <file>\n");
         return 1;
     }
 
     Repository* repo = repo_open(".");
     if (!repo) {
-        fprintf(stderr, "%sError:%s Not a MyGit repository.\n",
-            COLOR_RED, COLOR_RESET);
+        fprintf(stderr, "Error: Not a MyGit repository.\n");
         return 1;
+    }
+
+    if (argc >= 2) {
+        CommitNode* commit = repo_resolve_commit(repo, argv[0]);
+        if (!commit) {
+            SHA1Hash hash = sha1_from_string(argv[0]);
+            commit = repo_find_commit(repo, &hash);
+        }
+
+        if (!commit) {
+            fprintf(stderr, "Error: Commit '%s' not found.\n", argv[0]);
+            repo_close(repo);
+            return 1;
+        }
+
+        FileRecord* file = commit_find_file(commit, argv[1]);
+        if (!file) {
+            fprintf(stderr, "Error: File '%s' not found in commit %s.\n",
+                argv[1], sha1_to_string(&commit->hash));
+            repo_close(repo);
+            return 1;
+        }
+
+        char* file_hash_str = sha1_to_string(&file->hash);
+        char* subdir = str_ndup(file_hash_str, 2);
+        char* filename = str_dup(file_hash_str + 2);
+
+        char* object_path = path_join(repo->git_dir, "objects");
+        char* object_subdir = path_join(object_path, subdir);
+        char* object_file = path_join(object_subdir, filename);
+
+        size_t size;
+        char* content = read_file_content(object_file, &size);
+
+        if (content) {
+            write_file_content(argv[1], content, size);
+
+            char* commit_str = sha1_to_string(&commit->hash);
+            printf("Restored '%s' from commit %s\n", argv[1], commit_str);
+            free(commit_str);
+            free(content);
+        }
+        else {
+            fprintf(stderr, "Error: Cannot read file content from objects.\n");
+        }
+
+        free(file_hash_str);
+        free(subdir);
+        free(filename);
+        free(object_path);
+        free(object_subdir);
+        free(object_file);
+
+        repo_close(repo);
+        return 0;
     }
 
     BranchNode* branch = branch_find(repo->branch_manager, argv[0]);
@@ -339,8 +394,26 @@ int cmd_checkout(int argc, char* argv[]) {
         }
     }
     else {
-        fprintf(stderr, "%sError:%s Branch '%s' not found.\n",
-            COLOR_RED, COLOR_RESET, argv[0]);
+        SHA1Hash hash = sha1_from_string(argv[0]);
+        CommitNode* commit = repo_find_commit(repo, &hash);
+
+        if (commit) {
+            branch_checkout_commit(repo->branch_manager, &hash);
+
+            if (repo->head_commit) {
+                commit_free(repo->head_commit);
+            }
+            repo->head_commit = commit;
+
+            char* hash_str = sha1_to_string(&hash);
+            printf("Note: checking out '%s'.\n", hash_str);
+            printf("You are in 'detached HEAD' state.\n");
+            free(hash_str);
+            repo_save(repo);
+        }
+        else {
+            fprintf(stderr, "Error: Branch or commit '%s' not found.\n", argv[0]);
+        }
     }
 
     repo_close(repo);
