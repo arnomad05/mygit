@@ -2,11 +2,20 @@ CC := gcc
 CFLAGS := -Wall -Wextra -std=c11 -g -I./include -pipe
 LDFLAGS :=
 
-ifeq ($(OS),Windows_NT)
+ifdef ComSpec
     EXE_EXT := .exe
     CFLAGS += -D_WIN32
 else
-    EXE_EXT :=
+    UNAME_S := $(shell uname -s)
+    ifneq ($(findstring MINGW,$(UNAME_S)),)
+        EXE_EXT := .exe
+        CFLAGS += -D_WIN32
+    else ifneq ($(findstring MSYS,$(UNAME_S)),)
+        EXE_EXT := .exe
+        CFLAGS += -D_WIN32
+    else
+        EXE_EXT :=
+    endif
 endif
 
 SRC_DIR := src
@@ -24,7 +33,7 @@ all: $(EXECUTABLE)
 $(EXECUTABLE): $(OBJECTS)
 	mkdir -p $(BIN_DIR)
 	$(CC) $(OBJECTS) -o $@ $(LDFLAGS)
-	@echo Build successful: $(EXECUTABLE)
+	@echo "Build successful: $(EXECUTABLE)"
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 	mkdir -p $(OBJ_DIR)
