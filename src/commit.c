@@ -137,6 +137,22 @@ FileRecord* commit_find_file(CommitNode* commit, const char* filename) {
         }
     }
 
+    for (int i = 0; i < commit->file_count; i++) {
+        const char* stored_name = commit->files[i].filename;
+        const char* slash = strrchr(stored_name, '/');
+        if (!slash) slash = strrchr(stored_name, '\\');
+
+        const char* stored_basename = slash ? slash + 1 : stored_name;
+
+        const char* input_basename = strrchr(filename, '/');
+        if (!input_basename) input_basename = strrchr(filename, '\\');
+        input_basename = input_basename ? input_basename + 1 : filename;
+
+        if (strcmp(stored_basename, input_basename) == 0) {
+            return &commit->files[i];
+        }
+    }
+
     return NULL;
 }
 

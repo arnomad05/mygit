@@ -313,6 +313,111 @@ CommitNode* repo_resolve_commit(Repository* repo, const char* ref) {
     return NULL;
 }
 
+bool add_directory_recursive(Repository* repo, const char* dir_path) {
+    if (!repo || !dir_path) return false;
+
+    if (strstr(dir_path, ".mygit") != NULL) {
+        return true;
+    }
+
+    bool success = true;
+
+#ifdef _WIN32
+    char search_path[MAX_PATH_LEN];
+    snprintf(search_path, sizeof(search_path), "%s\\*", dir_path);
+
+    WIN32_FIND_DATAA find_data;
+    HANDLE find_handle = FindFirstFileA(search_path, &find_data);
+
+    if (find_handle == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+
+    do {
+        if (strcmp(find_data.cFileName, ".") == 0 ||
+            strcmp(find_data.cFileName, "..") == 0) {
+            continue;
+        }
+
+        char full_path[MAX_PATH_LEN];
+        snprintf(full_path, sizeof(full_path), "%s\\%s",
+            dir_path, find_data.cFileName);
+
+        if (strstr(full_path, ".mygit") != NULL) {
+            continue;
+        }
+
+        const char* clean_path = full_path;
+        if (strncmp(clean_path, ".\\", 2) == 0) {
+            clean_path += 2;
+        }
+        else if (strncmp(clean_path, "./", 2) == 0) {
+            clean_path += 2;
+        }
+
+        if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            success = add_directory_recursive(repo, full_path) && success;
+        }
+        else {
+            if (!repo_stage_file(repo, clean_path)) {
+                fprintf(stderr, "Error: Cannot stage '%s'\n", clean_path);
+                success = false;
+            }
+            else {
+                printf("Staged '%s'\n", clean_path);
+            }
+        }
+    } while (FindNextFileA(find_handle, &find_data));
+
+    FindClose(find_handle);
+#else
+    DIR* dir = opendir(dir_path);
+    if (!dir) {
+        return false;
+    }
+
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 ||
+            strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+
+        char* full_path = path_join(dir_path, entry->d_name);
+        if (!full_path) continue;
+
+        if (strstr(full_path, ".mygit") != NULL) {
+            free(full_path);
+            continue;
+        }
+
+        const char* clean_path = full_path;
+        if (strncmp(clean_path, "./", 2) == 0) {
+            clean_path += 2;
+        }
+
+        if (is_directory(full_path)) {
+            success = add_directory_recursive(repo, full_path) && success;
+        }
+        else {
+            if (!repo_stage_file(repo, clean_path)) {
+                fprintf(stderr, "Error: Cannot stage '%s'\n", clean_path);
+                success = false;
+            }
+            else {
+                printf("Staged '%s'\n", clean_path);
+            }
+        }
+
+        free(full_path);
+    }
+
+    closedir(dir);
+#endif
+
+    return success;
+}
+
 bool repo_save(Repository* repo) {
     if (!repo) return false;
 
@@ -508,7 +613,7 @@ int cmd_init(int argc, char* argv[]) {
 int cmd_add(int argc, char* argv[]) {
     if (argc < 1) {
         fprintf(stderr, "Error: No files specified.\n");
-        fprintf(stderr, "Usage: mygit add <file>\n");
+        fprintf(stderr, "Usage: mygit add <file_or_directory>\n");
         return 1;
     }
 
@@ -517,7 +622,7 @@ int cmd_add(int argc, char* argv[]) {
         fprintf(stderr, "Error: Not a MyGit repository.\n");
         return 1;
     }
-    
+
     bool success = true;
 
     for (int i = 0; i < argc; i++) {
@@ -527,12 +632,30 @@ int cmd_add(int argc, char* argv[]) {
             continue;
         }
 
-        if (!repo_stage_file(repo, argv[i])) {
-            fprintf(stderr, "Error: Cannot stage '%s'\n", argv[i]);
-            success = false;
+        const char* clean_name = argv[i];
+        if (strncmp(clean_name, ".\\", 2) == 0) {
+            clean_name += 2;
+        }
+        else if (strncmp(clean_name, "./", 2) == 0) {
+            clean_name += 2;
+        }
+
+        if (is_directory(argv[i])) {
+            printf("Adding files from directory: %s\n", clean_name);
+            success = add_directory_recursive(repo, argv[i]) && success;
+        }
+        else if (is_regular_file(argv[i])) {
+            if (!repo_stage_file(repo, clean_name)) {
+                fprintf(stderr, "Error: Cannot stage '%s'\n", clean_name);
+                success = false;
+            }
+            else {
+                printf("Staged '%s'\n", clean_name);
+            }
         }
         else {
-            printf("Staged '%s'\n", argv[i]);
+            fprintf(stderr, "Error: '%s' is not a regular file.\n", clean_name);
+            success = false;
         }
     }
 

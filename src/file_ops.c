@@ -61,20 +61,37 @@ bool create_directory(const char* path) {
 bool create_directories(const char* path) {
     if (!path) return false;
 
-    char* parent = path_dirname(path);
-    if (parent && strcmp(parent, ".") != 0 && !file_exists(parent)) {
-        if (!create_directories(parent)) {
-            free(parent);
-            return false;
+    char* normalized = str_dup(path);
+    if (!normalized) return false;
+
+    for (char* p = normalized; *p; p++) {
+        if (*p == '\\') *p = '/';
+    }
+
+    char* parent = path_dirname(normalized);
+    if (parent && strcmp(parent, ".") != 0 && strcmp(parent, "/") != 0) {
+        if (!file_exists(parent)) {
+            create_directories(parent);
         }
     }
     free(parent);
 
-    if (file_exists(path)) {
-        return is_directory(path);
+    if (!file_exists(normalized)) {
+#ifdef _WIN32
+        if (CreateDirectoryA(normalized, NULL) == 0) {
+            free(normalized);
+            return false;
+        }
+#else
+        if (mkdir(normalized, 0755) != 0) {
+            free(normalized);
+            return false;
+        }
+#endif
     }
 
-    return create_directory(path);
+    free(normalized);
+    return true;
 }
 
 bool delete_file(const char* path) {
@@ -157,7 +174,10 @@ bool write_file_content(const char* path, const char* content, size_t size) {
     if (!path || !content) return false;
 
     FILE* file = fopen(path, "wb");
-    if (!file) return false;
+    if (!file) {
+        fprintf(stderr, "Error: Cannot open file '%s' for writing\n", path);
+        return false;
+    }
 
     size_t written = fwrite(content, 1, size, file);
     fclose(file);

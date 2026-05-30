@@ -355,11 +355,28 @@ int cmd_checkout(int argc, char* argv[]) {
         char* content = read_file_content(object_file, &size);
 
         if (content) {
-            write_file_content(argv[1], content, size);
+            char* dir = path_dirname(argv[1]);
 
-            char* commit_str = sha1_to_string(&commit->hash);
-            printf("Restored '%s' from commit %s\n", argv[1], commit_str);
-            free(commit_str);
+            if (dir && strcmp(dir, ".") != 0 && !file_exists(dir)) {
+                printf("Creating directory: %s\n", dir);
+                if (!create_directories(dir)) {
+                    fprintf(stderr, "Error: Cannot create directory '%s'\n", dir);
+                    free(dir);
+                    free(content);
+                    repo_close(repo);
+                    return 1;
+                }
+            }
+            free(dir);
+
+            if (write_file_content(argv[1], content, size)) {
+                printf("Restored '%s' from commit %s\n",
+                    argv[1], sha1_to_string(&commit->hash));
+            }
+            else {
+                fprintf(stderr, "Error: Cannot write file '%s'\n", argv[1]);
+            }
+
             free(content);
         }
         else {

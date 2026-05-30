@@ -38,6 +38,7 @@ CommitNode* repo_get_head_commit(Repository* repo);
 bool repo_add_commit(Repository* repo, CommitNode* commit);
 CommitNode* repo_find_commit(Repository* repo, const SHA1Hash* hash);
 CommitNode* repo_resolve_commit(Repository* repo, const char* ref);
+bool add_directory_recursive(Repository* repo, const char* dir_path);
 
 bool repo_save(Repository* repo);
 Repository* repo_load(const char* path);
